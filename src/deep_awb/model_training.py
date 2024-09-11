@@ -63,6 +63,7 @@ def create_DeepAWB_model(args) -> DeepAWBModel:
     )
 
 
+@console_logger.catch
 def fit_model_and_log():
     args = parse_args()
     console_logger.debug(f"{args=}")

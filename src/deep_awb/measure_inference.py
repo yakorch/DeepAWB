@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 from .data_loaders import get_test_dataset, setup_common_transform
-from .train_model import console_logger, create_DeepAWB_model, parse_args
+from .model_training import console_logger, create_DeepAWB_model, parse_args
 
 console_logger.level("WARNING")
 

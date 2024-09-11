@@ -73,10 +73,13 @@ _TRAIN_AUGMENTATIONS = transforms.Compose(
 
 def setup_common_transform(image_scale: float = 1):
     global _COMMON_TRANSFORM
+
+    IMAGE_HEIGHT, IMAGE_WIDTH = 432, 648
+
     if image_scale == 1:
         _COMMON_TRANSFORM = transforms.Compose([transforms.ToTensor()])
     else:
-        _COMMON_TRANSFORM = transforms.Compose([transforms.Resize((int(432 / image_scale), int(648 / image_scale))), transforms.ToTensor()])
+        _COMMON_TRANSFORM = transforms.Compose([transforms.Resize((int(IMAGE_HEIGHT / image_scale), int(IMAGE_WIDTH / image_scale))), transforms.ToTensor()])
 
 
 def get_train_dataset():

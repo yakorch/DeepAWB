@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
@@ -7,8 +8,12 @@ from loguru import logger as console_logger
 from torch.nn import functional as F
 
 from .data_loaders import get_test_data_loader, get_train_data_loader
+from .fit_loss_function import estimate_wb_gains_density
 
 _N_CLASSES = 2
+
+
+_KDE = estimate_wb_gains_density(visualize=False)
 
 
 class ConvReLUMaxPoolBlock(nn.Module):
@@ -89,8 +94,13 @@ class DeepAWBModel(pl.LightningModule):
     def _process_batch(self, batch, batch_idx):
         x, y = batch
         predictions = self(x)
-        loss = F.mse_loss(predictions, y)
-        return loss
+        loss = F.mse_loss(predictions, y, reduction="none")
+
+        weights = 1 / np.sqrt(_KDE(y.cpu().T))
+        weights = torch.tensor(weights, device=loss.device, dtype=torch.float32).unsqueeze(1)
+        weighted_loss = loss * weights
+
+        return weighted_loss.mean()
 
     def training_step(self, batch, batch_idx):
         loss = self._process_batch(batch, batch_idx)
