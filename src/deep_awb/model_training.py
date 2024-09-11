@@ -6,7 +6,7 @@ if __name__ == "__main__":
     sys.stderr = open("./stderr-log.txt", "w")
 
 import argparse
-
+import pathlib
 import numpy as np
 from loguru import logger as console_logger
 from pytorch_lightning import Trainer
@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument("--stride", type=int, nargs="+", required=True, help="Kernel stride.")
 
     parser.add_argument("--log_path", type=str, required=True, help="Path to the log file.")
+    parser.add_argument("--checkpoint_path", type=pathlib.Path, required=False, help="Path to save the model checkpoint after training.")
 
     args = parser.parse_args()
     assert len(args.n_kernels) == len(args.kernel_size) == len(args.stride), "All kernel parameters must have the same length."
@@ -53,8 +54,6 @@ def create_DeepAWB_model(args) -> DeepAWBModel:
     hidden_neurons[0] -= sum(hidden_neurons) - args.total_hidden_neurons
 
     hidden_neurons.append(_N_CLASSES)
-
-    console_logger.debug(f"{hidden_neurons=}")
 
     return DeepAWBModel(
         block_configs=conv_block_configs,
@@ -92,6 +91,9 @@ def fit_model_and_log():
     end = time.time()
     train_time = end - start
     logger.log_metrics({"train_time": train_time})
+
+    if args.checkpoint_path is not None:
+        trainer.save_checkpoint(args.checkpoint_path)
 
     val_loss = trainer.callback_metrics["val_loss"]
 

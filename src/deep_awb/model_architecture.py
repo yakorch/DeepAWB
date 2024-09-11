@@ -14,6 +14,7 @@ _N_CLASSES = 2
 
 
 _KDE = estimate_wb_gains_density(visualize=False)
+_KDE_Epsilon = 1e-6
 
 
 class ConvReLUMaxPoolBlock(nn.Module):
@@ -24,8 +25,7 @@ class ConvReLUMaxPoolBlock(nn.Module):
             console_logger.warning(f"{kernel_size=} is not odd.")
 
         padding = (kernel_size - 1) // 2
-
-        self.conv_layer = nn.Conv2d(in_channels=in_channels, out_channels=kernels, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.conv_layer = nn.Conv2d(in_channels=in_channels, out_channels=kernels, kernel_size=kernel_size, stride=stride, padding=padding, bias=False)
         self.bn = nn.BatchNorm2d(kernels)
         self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2)
 
@@ -71,6 +71,19 @@ def RegressionBuilder(embedding_space_dim: int, hidden_neurons: list[int]) -> nn
     return nn.Sequential(*hidden_layers)
 
 
+class LambdaLayer(nn.Module):
+    def __init__(self, lambd):
+        super().__init__()
+        self.lambd = lambd
+
+    def forward(self, x):
+        return self.lambd(x)
+
+
+def ScaledSigmoid(scale):
+    return LambdaLayer(lambda x: F.sigmoid(x) * scale)
+
+
 class DeepAWBModel(pl.LightningModule):
     MAX_POSSIBLE_GAIN = 1.2
 
@@ -82,21 +95,26 @@ class DeepAWBModel(pl.LightningModule):
     ) -> None:
         super().__init__()
 
+        self.save_hyperparameters()
+
         self.feature_extractor, embedding_space_dim = FeatureExtractorBuilder(block_configs)
         self.regression_layer = RegressionBuilder(embedding_space_dim, hidden_neurons)
-        self.model = nn.Sequential(self.feature_extractor, self.regression_layer)
+
+        final_activation = ScaledSigmoid(self.MAX_POSSIBLE_GAIN)
+
+        self.model = nn.Sequential(self.feature_extractor, self.regression_layer, final_activation)
 
         self.learning_rate = learning_rate
 
     def forward(self, x):
-        return F.sigmoid(self.model(x)) * self.MAX_POSSIBLE_GAIN
+        return self.model(x)
 
     def _process_batch(self, batch, batch_idx):
         x, y = batch
         predictions = self(x)
         loss = F.mse_loss(predictions, y, reduction="none")
 
-        weights = 1 / np.sqrt(_KDE(y.cpu().T))
+        weights = 1 / np.sqrt(_KDE(y.cpu().T) + _KDE_Epsilon)
         weights = torch.tensor(weights, device=loss.device, dtype=torch.float32).unsqueeze(1)
         weighted_loss = loss * weights
 

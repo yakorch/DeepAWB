@@ -63,6 +63,8 @@ class RawAWBDataset(Dataset):
         return pair
 
 
+IMAGE_HEIGHT, IMAGE_WIDTH = 432, 648
+
 _COMMON_TRANSFORM = ...
 _TRAIN_AUGMENTATIONS = transforms.Compose(
     [
@@ -73,8 +75,6 @@ _TRAIN_AUGMENTATIONS = transforms.Compose(
 
 def setup_common_transform(image_scale: float = 1):
     global _COMMON_TRANSFORM
-
-    IMAGE_HEIGHT, IMAGE_WIDTH = 432, 648
 
     if image_scale == 1:
         _COMMON_TRANSFORM = transforms.Compose([transforms.ToTensor()])
@@ -93,7 +93,7 @@ def get_test_dataset():
 
 
 def get_train_data_loader():
-    return DataLoader(get_train_dataset(), batch_size=32, shuffle=True, num_workers=7, persistent_workers=True)
+    return DataLoader(get_train_dataset(), batch_size=32, shuffle=True, num_workers=7, persistent_workers=True, pin_memory=True)
 
 
 def get_test_data_loader():
