@@ -5,12 +5,11 @@ import platform
 import resource
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import psutil
 import torch
-import torch.profiler
+import torch.nn as nn
 from loguru import logger as console_logger
 
 from .data_loaders import IMAGE_HEIGHT, IMAGE_WIDTH
@@ -39,19 +38,16 @@ def get_max_memory_usage_bytes():
     return max_mem_usage_bytes
 
 
-def trace_model(image_scale: float, checkpoint_path: pathlib.Path, output_path: Optional[pathlib.Path]):
-    model = DeepAWBModel.load_from_checkpoint(checkpoint_path).model.to(_TORCH_DEVICE)
-    model.eval()
+def optimize_model(model: nn.Module, sample_input: torch.Tensor) -> None:
+    torch.jit.enable_onednn_fusion(True)
 
-    random_image_input = torch.randn(size=(1, 3, int(IMAGE_HEIGHT / image_scale), int(IMAGE_WIDTH / image_scale)), device=_TORCH_DEVICE)
+    # import torch.fx.experimental.optimization as optimization
+    # optimization.fuse(model, inplace=True)
+    model = torch.jit.trace(model, sample_input)
+    model = torch.jit.freeze(model)
+    model = torch.compile(model)
 
-    traced_model: torch.jit.TracedModule = torch.jit.trace(model, random_image_input)
-    console_logger.debug(f"{type(traced_model)=}")
-
-    if output_path is not None:
-        traced_model.save(output_path)
-    else:
-        console_logger.warning("The traced model was not saved.")
+    # model = torch.jit.optimize_for_inference(model)
 
 
 @dataclass(frozen=True, order=False)
@@ -71,17 +67,8 @@ def measure_inference(image_scale: float, checkpoint_path: pathlib.Path) -> Infe
 
     model = DeepAWBModel.load_from_checkpoint(checkpoint_path).model.to(_TORCH_DEVICE)
     model.eval()
-
     random_image_input = torch.randn(size=(1, 3, int(IMAGE_HEIGHT / image_scale), int(IMAGE_WIDTH / image_scale)), device=_TORCH_DEVICE)
-
-    torch.jit.enable_onednn_fusion(True)
-
-    # import torch.fx.experimental.optimization as optimization
-    # optimization.fuse(model, inplace=True)
-    model = torch.jit.trace(model, random_image_input)
-    model = torch.jit.freeze(model)
-    model = torch.compile(model)
-    # model = torch.jit.optimize_for_inference(model)
+    optimize_model(model, random_image_input)
 
     cpu_time = np.inf
     wall_time = np.inf
