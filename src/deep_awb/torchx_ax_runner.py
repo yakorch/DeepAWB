@@ -6,7 +6,7 @@ from torchx import specs
 from torchx.components import utils
 
 from . import LOG_DIR
-from .search_space import _FEATURE_EXTRACTOR_WIDTH
+from .search_space import _FEATURE_EXTRACTOR_DEPTH
 
 
 def trainer(log_path: str, total_hidden_neurons: int, MLP_depth: int, learning_rate: float, epochs: int, image_scale: float, trial_idx: int = -1, **kwargs) -> specs.AppDef:
@@ -14,7 +14,7 @@ def trainer(log_path: str, total_hidden_neurons: int, MLP_depth: int, learning_r
     if trial_idx >= 0:
         log_path = Path(log_path).joinpath(str(trial_idx)).absolute().as_posix()
 
-    n_kernels, kernel_sizes, strides = ([str(kwargs[f"{attribute}_{i}"]) for i in range(_FEATURE_EXTRACTOR_WIDTH)] for attribute in ["n_kernels", "kernel_size", "stride"])
+    n_kernels, kernel_sizes, strides = ([str(kwargs[f"{attribute}_{i}"]) for i in range(_FEATURE_EXTRACTOR_DEPTH)] for attribute in ["n_kernels", "kernel_size", "stride"])
 
     return utils.python(
         "--log_path",
