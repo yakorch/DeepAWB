@@ -1,99 +1,101 @@
 import argparse
-import os
 import pathlib
-import platform
-import resource
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from typing import Callable
 
 import numpy as np
-import psutil
 import torch
-import torch.nn as nn
+import yaml
 from loguru import logger as console_logger
+from memory_profiler import memory_usage
 
-from .data_loaders import IMAGE_HEIGHT, IMAGE_WIDTH
-from .model_architecture import DeepAWBModel
+from .data_loaders import SimpleCubePPDatasetInfo, setup_dataset_info
 
-_CURRENT_PLATFORM = platform.system()
 _TORCH_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Run the inference measuring experiment.")
-    parser.add_argument("--image_scale", type=float, required=True, help="Scale factor for images.")
-    parser.add_argument("--checkpoint_path", type=pathlib.Path, required=True, help="Path to `pytorch_lightning` checkpoint.")
-
-    return parser.parse_args()
-
-
-def get_max_memory_usage_bytes():
-    max_mem_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    if _CURRENT_PLATFORM == "Darwin":
-        max_mem_usage_bytes = max_mem_usage
-    elif _CURRENT_PLATFORM == "Linux":
-        max_mem_usage_bytes = max_mem_usage * 1024
-    else:
-        raise NotImplementedError(f"Unsupported platform: {_CURRENT_PLATFORM}")
-    return max_mem_usage_bytes
-
-
-def optimize_model(model: nn.Module, sample_input: torch.Tensor) -> None:
-    torch.jit.enable_onednn_fusion(True)
-
-    # import torch.fx.experimental.optimization as optimization
-    # optimization.fuse(model, inplace=True)
-    model = torch.jit.trace(model, sample_input)
-    model = torch.jit.freeze(model)
-    model = torch.compile(model)
-
-    # model = torch.jit.optimize_for_inference(model)
 
 
 @dataclass(frozen=True, order=False)
 class InferenceStats:
     cpu_time: float
     wall_time: float
-    max_memory_usage_MB: float
+    peak_memory_usage_MiB: float
 
 
-def measure_inference(image_scale: float, checkpoint_path: pathlib.Path) -> InferenceStats:
-    TOTAL_RUNS = 200
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run the inference measuring experiment.")
+    parser.add_argument("--image_scale", type=int, required=True, help="Image dimensions.")
+    parser.add_argument("--optimize", type=bool, required=True, help="Whether to optimize the model for inference.")
+    parser.add_argument("--n_runs", type=int, required=True, help="Number of runs to measure the inference time.")
+    parser.add_argument("--script_module_path", type=pathlib.Path, required=True, help="Path to the `ScriptModule` model.")
+    parser.add_argument("--yaml_path", type=pathlib.Path, required=True, help="YAML inference results path.")
 
-    this_process = psutil.Process(os.getpid())
-    current_mem_usage_bytes = this_process.memory_info().rss
-    max_mem_usage_bytes = get_max_memory_usage_bytes()
-    assert current_mem_usage_bytes == max_mem_usage_bytes, f"The current ({current_mem_usage_bytes}) and max ({max_mem_usage_bytes}) memory usage are not the same."
+    return parser.parse_args()
 
-    model = DeepAWBModel.load_from_checkpoint(checkpoint_path).model.to(_TORCH_DEVICE)
-    model.eval()
-    random_image_input = torch.randn(size=(1, 3, int(IMAGE_HEIGHT / image_scale), int(IMAGE_WIDTH / image_scale)), device=_TORCH_DEVICE)
-    optimize_model(model, random_image_input)
 
+def get_model_size(model):
+    total_params = 0
+    for param in model.parameters():
+        total_params += param.numel() * param.element_size()
+
+    for buffer in model.buffers():
+        total_params += buffer.numel() * buffer.element_size()
+
+    return total_params / (1024**2)
+
+
+def optimize_model(model: torch.jit.ScriptModule, sample_input: torch.Tensor) -> Callable:
+    """
+    Optimizes the model for inference.
+    """
+    model = torch.jit.freeze(model)
+    model = torch.compile(model)
+    # model = torch.jit.optimize_for_inference(model)
+    return model
+
+
+def min_inference_time(model: Callable, sample_input: torch.Tensor, n_runs: int) -> tuple[int, int]:
     cpu_time = np.inf
     wall_time = np.inf
 
     with torch.no_grad():
-        for _ in range(TOTAL_RUNS):
+        for _ in range(n_runs):
             start_cpu = time.process_time()
-            start_wall = time.perf_counter_ns()
+            start_wall = time.perf_counter()
 
-            model(random_image_input)
+            model(sample_input)
 
             end_cpu = time.process_time()
-            end_wall = time.perf_counter_ns()
+            end_wall = time.perf_counter()
 
             cpu_time = min(cpu_time, (end_cpu - start_cpu))
             wall_time = min(wall_time, (end_wall - start_wall))
-
-    max_mem_usage_bytes = get_max_memory_usage_bytes()
-
-    return InferenceStats(cpu_time, wall_time / 1e9, (max_mem_usage_bytes - current_mem_usage_bytes) / 1024**2)
-
-
-def submit_measuring_job(): ...
+    return cpu_time, wall_time
 
 
 if __name__ == "__main__":
     args = parse_args()
-    console_logger.info(measure_inference(args.image_scale, args.checkpoint_path))
+
+    setup_dataset_info(args.image_scale)
+    image_dims = SimpleCubePPDatasetInfo.image_dims
+    sample_input = torch.rand(1, 3, *image_dims)
+
+    script_module_path = args.script_module_path
+    assert script_module_path.exists()
+
+    model = torch.jit.load(script_module_path)
+    model.to(_TORCH_DEVICE)
+    console_logger.info(f"Current device: {_TORCH_DEVICE}")
+    model.eval()
+
+    if args.optimize:
+        model = optimize_model(model, sample_input)
+
+    (mem_usage_MiB_samples, (cpu_time, wall_time)) = memory_usage((min_inference_time, (model, sample_input, args.n_runs), {}), interval=0.005, timeout=1, retval=True)
+    peak_memory_increment = max(mem_usage_MiB_samples) - mem_usage_MiB_samples[0]
+
+    inference_stats = InferenceStats(cpu_time, wall_time, peak_memory_increment)
+    console_logger.info(f"{inference_stats=}")
+
+    with open(args.yaml_path, "w") as yaml_file:
+        yaml.dump(asdict(inference_stats), yaml_file)

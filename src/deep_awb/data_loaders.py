@@ -1,4 +1,5 @@
 import pathlib
+from dataclasses import dataclass
 from typing import Callable, Optional
 
 import numpy as np
@@ -63,32 +64,40 @@ class RawAWBDataset(Dataset):
         return pair
 
 
-IMAGE_HEIGHT, IMAGE_WIDTH = 432, 648
+@dataclass(frozen=False, order=False)
+class DatasetInfo:
+    original_image_dims: tuple[int, int]
+    image_scale: Optional[float]
+    common_transorm: Optional[transforms.Compose]
+    train_augmentations: Optional[transforms.Compose]
 
-_COMMON_TRANSFORM = ...
-_TRAIN_AUGMENTATIONS = transforms.Compose(
-    [
-        transforms.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1)),
-    ]
-)
+    @property
+    def image_dims(self):
+        if self.image_scale is None:
+            raise ValueError("Image scale is not set.")
+        return tuple(int(dim / self.image_scale) for dim in self.original_image_dims)
 
 
-def setup_common_transform(image_scale: float = 1):
-    global _COMMON_TRANSFORM
+SimpleCubePPDatasetInfo = DatasetInfo((432, 648), None, None, transforms.Compose([transforms.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1))]))
+
+
+def setup_dataset_info(image_scale: float = 1):
+    SimpleCubePPDatasetInfo.image_scale = image_scale
 
     if image_scale == 1:
-        _COMMON_TRANSFORM = transforms.Compose([transforms.ToTensor()])
+        SimpleCubePPDatasetInfo.common_transorm = transforms.Compose([transforms.ToTensor()])
     else:
-        _COMMON_TRANSFORM = transforms.Compose([transforms.Resize((int(IMAGE_HEIGHT / image_scale), int(IMAGE_WIDTH / image_scale))), transforms.ToTensor()])
+        image_height, image_width = SimpleCubePPDatasetInfo.image_dims
+        SimpleCubePPDatasetInfo.common_transorm = transforms.Compose([transforms.Resize((image_height, image_width)), transforms.ToTensor()])
 
 
 def get_train_dataset():
-    train_transform = transforms.Compose([_COMMON_TRANSFORM, _TRAIN_AUGMENTATIONS])
+    train_transform = transforms.Compose([SimpleCubePPDatasetInfo.common_transorm, SimpleCubePPDatasetInfo.train_augmentations])
     return RawAWBDataset(csv_annotations=TRAIN_SET_FOLDER / "gt.csv", images_dir=TRAIN_SET_FOLDER / "PNG", transform=train_transform, cache_data=False)
 
 
 def get_test_dataset():
-    test_transform = _COMMON_TRANSFORM
+    test_transform = SimpleCubePPDatasetInfo.common_transorm
     return RawAWBDataset(csv_annotations=TEST_SET_FOLDER / "gt.csv", images_dir=TEST_SET_FOLDER / "PNG", transform=test_transform, cache_data=True)
 
 

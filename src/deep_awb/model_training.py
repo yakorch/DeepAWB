@@ -7,12 +7,14 @@ if __name__ == "__main__":
 
 import argparse
 import pathlib
+
 import numpy as np
+import torch
 from loguru import logger as console_logger
 from pytorch_lightning import Trainer
 from pytorch_lightning import loggers as pl_loggers
 
-from .data_loaders import setup_common_transform
+from .data_loaders import SimpleCubePPDatasetInfo, setup_dataset_info
 from .model_architecture import _N_CLASSES, ConvReLUMaxPoolBlockConfig, DeepAWBModel
 
 
@@ -32,7 +34,7 @@ def parse_args():
     parser.add_argument("--stride", type=int, nargs="+", required=True, help="Kernel stride.")
 
     parser.add_argument("--log_path", type=str, required=True, help="Path to the log file.")
-    parser.add_argument("--checkpoint_path", type=pathlib.Path, required=False, help="Path to save the model checkpoint after training.")
+    parser.add_argument("--script_module_path", type=pathlib.Path, required=False, help="Path to save the traced model after training.")
 
     args = parser.parse_args()
     assert len(args.n_kernels) == len(args.kernel_size) == len(args.stride), "All kernel parameters must have the same length."
@@ -67,7 +69,7 @@ def fit_model_and_log():
     args = parse_args()
     console_logger.debug(f"{args=}")
 
-    setup_common_transform(args.image_scale)
+    setup_dataset_info(args.image_scale)
     AWB_model = create_DeepAWB_model(args)
 
     trainer = Trainer(
@@ -92,8 +94,10 @@ def fit_model_and_log():
     train_time = end - start
     logger.log_metrics({"train_time": train_time})
 
-    if args.checkpoint_path is not None:
-        trainer.save_checkpoint(args.checkpoint_path)
+    if args.script_module_path is not None:
+        model = AWB_model.model
+        model = torch.jit.trace(model, torch.randn(1, 3, *SimpleCubePPDatasetInfo.image_dims))
+        model.save(args.script_module_path)
 
     val_loss = trainer.callback_metrics["val_loss"]
 
