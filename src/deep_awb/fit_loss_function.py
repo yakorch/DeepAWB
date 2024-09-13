@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import gaussian_kde
 
-from .data_loaders import get_test_dataset, get_train_dataset, SimpleCubePPDatasetInfo
+from .data_loaders import SimpleCubePPDatasetInfo, get_test_dataset, get_train_dataset
 
 
 def estimate_wb_gains_density(visualize: bool) -> Callable:

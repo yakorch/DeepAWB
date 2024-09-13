@@ -1,0 +1,1 @@
+This visualization code is adapted from the original code to fit the project's needs. Credit to the dataset authors. Original code: https://github.com/Visillect/CubePlusPlus/blob/master/challenge/make_preview.py.

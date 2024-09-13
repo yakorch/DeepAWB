@@ -66,25 +66,38 @@ class RawAWBDataset(Dataset):
 
 @dataclass(frozen=False, order=False)
 class DatasetInfo:
-    original_image_dims: tuple[int, int]
-    image_scale: Optional[float]
+    _original_image_dims: tuple[int, int]
+    _image_scale: Optional[float]
     common_transorm: Optional[transforms.Compose]
     train_augmentations: Optional[transforms.Compose]
 
     @property
     def image_dims(self):
-        assert self.image_scale is not None
-        return tuple(int(dim / self.image_scale) for dim in self.original_image_dims)
+        assert self._image_scale is not None
+        return tuple(int(dim / self._image_scale) for dim in self._original_image_dims)
 
     def setup(self, image_scale: float = 1) -> None:
-        self.image_scale = image_scale
+        self._image_scale = image_scale
         if image_scale == 1:
             self.common_transorm = transforms.Compose([transforms.ToTensor()])
         else:
             self.common_transorm = transforms.Compose([transforms.Resize(self.image_dims), transforms.ToTensor()])
 
 
-SimpleCubePPDatasetInfo = DatasetInfo((432, 648), None, None, transforms.Compose([transforms.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1))]))
+SimpleCubePPDatasetInfo = DatasetInfo(
+    (432, 648),
+    None,
+    None,
+    transforms.Compose(
+        [
+            transforms.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1)),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomVerticalFlip(p=0.25),
+            transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0)),
+            transforms.Lambda(lambda img: img + torch.randn_like(img) * 0.01),
+        ]
+    ),
+)
 
 
 def get_train_dataset():
