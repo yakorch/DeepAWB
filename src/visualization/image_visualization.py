@@ -52,14 +52,16 @@ def save_image(path: pathlib.Path, image: np.ndarray):
 
 
 @logger.catch
-def image_processing_pipeline(image_path: pathlib.Path, processed_path: pathlib.Path, wb_gains: Optional[tuple[float, float]] = None):
+def image_processing_pipeline(image_path: pathlib.Path, processed_path: Optional[pathlib.Path], wb_gains: Optional[tuple[float, float]] = None):
     if wb_gains is None:
         wb_gains = (1, 1)
 
     image = compute_unbalanced_image(image_path)
     image = apply_white_balance(image, wb_gains)
     image = perform_color_correction_and_gamma(image)
-    save_image(processed_path, image)
+    if processed_path is not None:
+        save_image(processed_path, image)
+    return image
 
 
 if __name__ == "__main__":

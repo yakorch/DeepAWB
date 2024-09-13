@@ -2,14 +2,16 @@ import pathlib
 from dataclasses import dataclass
 from typing import Callable, Optional
 
+import albumentations as A
 import numpy as np
 import pandas as pd
 import torch
+from albumentations.pytorch import ToTensorV2
+from loguru import logger as console_logger
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
-from torchvision import transforms
 
-from ..__init__ import TEST_SET_FOLDER, TRAIN_SET_FOLDER
+from ..__init__ import ORIGINAL_IMAGE_DIMS, TEST_SET_FOLDER, TRAIN_SET_FOLDER
 
 
 def parse_annotations(annotations: pd.DataFrame) -> pd.DataFrame:
@@ -20,8 +22,17 @@ def parse_annotations(annotations: pd.DataFrame) -> pd.DataFrame:
     return modified_annotations
 
 
+@console_logger.catch
+def load_processable_image(image_path: pathlib.Path, transform: A.Compose) -> torch.Tensor:
+    image = Image.open(image_path).convert("RGB")
+    image_np = np.frombuffer(image.tobytes(), dtype=np.uint8)
+    image_np = (image_np.reshape((image.height, image.width, 3))).astype(np.float32) / 255.0
+
+    return transform(image=image_np)["image"]
+
+
 class RawAWBDataset(Dataset):
-    def __init__(self, csv_annotations: pathlib.Path, images_dir: pathlib.Path, transform: Optional[transforms.Compose] = None, cache_data: bool = False):
+    def __init__(self, csv_annotations: pathlib.Path, images_dir: pathlib.Path, transform: A.Compose, cache_data: bool = False):
         """
         Args:
             csv_file (pathlib.Path): Path to the csv file with annotations.
@@ -46,11 +57,9 @@ class RawAWBDataset(Dataset):
 
     def _actual_getitem(self, idx: int):
         img_name = self.images_dir / (self.annotations["image"].iloc[idx] + ".png")
-        image = Image.open(img_name).convert("RGB")
+        image = load_processable_image(img_name, self.transform)
         label = torch.tensor(self.annotations.iloc[idx][["R/G", "B/G"]].values.astype(np.float32))
 
-        if self.transform is not None:
-            image = self.transform(image)
         return image, label
 
     def __getitem__(self, idx: int):
@@ -68,8 +77,8 @@ class RawAWBDataset(Dataset):
 class DatasetInfo:
     _original_image_dims: tuple[int, int]
     _image_scale: Optional[float]
-    common_transorm: Optional[transforms.Compose]
-    train_augmentations: Optional[transforms.Compose]
+    _resize_transform: Optional[A.Compose]
+    train_augmentations: Optional[A.Compose]
 
     @property
     def image_dims(self):
@@ -78,36 +87,47 @@ class DatasetInfo:
 
     def setup(self, image_scale: float = 1) -> None:
         self._image_scale = image_scale
-        if image_scale == 1:
-            self.common_transorm = transforms.Compose([transforms.ToTensor()])
-        else:
-            self.common_transorm = transforms.Compose([transforms.Resize(self.image_dims), transforms.ToTensor()])
+        image_height, image_width = self.image_dims
+        self._resize_transform = A.Resize(height=image_height, width=image_width)
+
+    @property
+    def train_transform(self):
+        transformations = [self._resize_transform]
+
+        if self.train_augmentations is not None:
+            transformations.append(self.train_augmentations)
+
+        transformations.append(ToTensorV2())
+
+        return A.Compose(transformations)
+
+    @property
+    def test_transform(self):
+        return A.Compose([self._resize_transform, ToTensorV2()])
 
 
 SimpleCubePPDatasetInfo = DatasetInfo(
-    (432, 648),
+    ORIGINAL_IMAGE_DIMS,
     None,
     None,
-    transforms.Compose(
+    A.Compose(
         [
-            transforms.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1)),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomVerticalFlip(p=0.25),
-            transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0)),
-            transforms.Lambda(lambda img: img + torch.randn_like(img) * 0.01),
+            A.Affine(rotate=15, translate_percent=(0.1, 0.1), scale=(0.9, 1.1), p=0.75),
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.25),
+            A.GaussianBlur(blur_limit=(3, 7), sigma_limit=(0.1, 2.0), p=0.8),
+            A.GaussNoise(var_limit=(0.001, 0.01), p=0.8),
         ]
     ),
 )
 
 
 def get_train_dataset():
-    train_transform = transforms.Compose([SimpleCubePPDatasetInfo.common_transorm, SimpleCubePPDatasetInfo.train_augmentations])
-    return RawAWBDataset(csv_annotations=TRAIN_SET_FOLDER / "gt.csv", images_dir=TRAIN_SET_FOLDER / "PNG", transform=train_transform, cache_data=False)
+    return RawAWBDataset(csv_annotations=TRAIN_SET_FOLDER / "gt.csv", images_dir=TRAIN_SET_FOLDER / "PNG", transform=SimpleCubePPDatasetInfo.train_transform, cache_data=False)
 
 
 def get_test_dataset():
-    test_transform = SimpleCubePPDatasetInfo.common_transorm
-    return RawAWBDataset(csv_annotations=TEST_SET_FOLDER / "gt.csv", images_dir=TEST_SET_FOLDER / "PNG", transform=test_transform, cache_data=True)
+    return RawAWBDataset(csv_annotations=TEST_SET_FOLDER / "gt.csv", images_dir=TEST_SET_FOLDER / "PNG", transform=SimpleCubePPDatasetInfo.test_transform, cache_data=True)
 
 
 def get_train_data_loader():

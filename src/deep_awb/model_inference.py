@@ -20,6 +20,7 @@ class InferenceStats:
     cpu_time: float
     wall_time: float
     peak_memory_usage_MiB: float
+    image_scale: float
 
 
 def parse_args():
@@ -73,19 +74,23 @@ def min_inference_time(model: Callable, sample_input: torch.Tensor, n_runs: int)
     return cpu_time, wall_time
 
 
-if __name__ == "__main__":
-    args = parse_args()
-
-    SimpleCubePPDatasetInfo.setup(args.image_scale)
-    sample_input = torch.rand(1, 3, *SimpleCubePPDatasetInfo.image_dims)
-
-    script_module_path = args.script_module_path
+def load_model(script_module_path: pathlib.Path) -> torch.jit.ScriptModule:
     assert script_module_path.exists()
-
     model = torch.jit.load(script_module_path)
     model.to(_TORCH_DEVICE)
     console_logger.info(f"Current device: {_TORCH_DEVICE}")
     model.eval()
+
+    return model
+
+
+if __name__ == "__main__":
+    args = parse_args()
+
+    model = load_model(args.script_module_path)
+
+    SimpleCubePPDatasetInfo.setup(args.image_scale)
+    sample_input = torch.rand(1, 3, *SimpleCubePPDatasetInfo.image_dims)
 
     if args.optimize:
         model = optimize_model(model, sample_input)
@@ -93,7 +98,7 @@ if __name__ == "__main__":
     (mem_usage_MiB_samples, (cpu_time, wall_time)) = memory_usage((min_inference_time, (model, sample_input, args.n_runs), {}), interval=0.005, timeout=1, retval=True)
     peak_memory_increment = max(mem_usage_MiB_samples) - mem_usage_MiB_samples[0]
 
-    inference_stats = InferenceStats(cpu_time, wall_time, peak_memory_increment)
+    inference_stats = InferenceStats(cpu_time, wall_time, peak_memory_increment, args.image_scale)
     console_logger.info(f"{inference_stats=}")
 
     with open(args.yaml_path, "w") as yaml_file:
