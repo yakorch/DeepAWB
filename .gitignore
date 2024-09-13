@@ -169,4 +169,5 @@ src/deep_awb/logs
 *.ckpt
 *.pt
 *.pth
+*.yaml
 *.data

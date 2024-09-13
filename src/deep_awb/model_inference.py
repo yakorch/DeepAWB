@@ -10,7 +10,7 @@ import yaml
 from loguru import logger as console_logger
 from memory_profiler import memory_usage
 
-from .data_loaders import SimpleCubePPDatasetInfo, setup_dataset_info
+from .data_loaders import SimpleCubePPDatasetInfo
 
 _TORCH_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -76,9 +76,8 @@ def min_inference_time(model: Callable, sample_input: torch.Tensor, n_runs: int)
 if __name__ == "__main__":
     args = parse_args()
 
-    setup_dataset_info(args.image_scale)
-    image_dims = SimpleCubePPDatasetInfo.image_dims
-    sample_input = torch.rand(1, 3, *image_dims)
+    SimpleCubePPDatasetInfo.setup(args.image_scale)
+    sample_input = torch.rand(1, 3, *SimpleCubePPDatasetInfo.image_dims)
 
     script_module_path = args.script_module_path
     assert script_module_path.exists()

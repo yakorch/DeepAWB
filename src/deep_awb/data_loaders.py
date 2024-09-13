@@ -73,22 +73,18 @@ class DatasetInfo:
 
     @property
     def image_dims(self):
-        if self.image_scale is None:
-            raise ValueError("Image scale is not set.")
+        assert self.image_scale is not None
         return tuple(int(dim / self.image_scale) for dim in self.original_image_dims)
+
+    def setup(self, image_scale: float = 1) -> None:
+        self.image_scale = image_scale
+        if image_scale == 1:
+            self.common_transorm = transforms.Compose([transforms.ToTensor()])
+        else:
+            self.common_transorm = transforms.Compose([transforms.Resize(self.image_dims), transforms.ToTensor()])
 
 
 SimpleCubePPDatasetInfo = DatasetInfo((432, 648), None, None, transforms.Compose([transforms.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1))]))
-
-
-def setup_dataset_info(image_scale: float = 1):
-    SimpleCubePPDatasetInfo.image_scale = image_scale
-
-    if image_scale == 1:
-        SimpleCubePPDatasetInfo.common_transorm = transforms.Compose([transforms.ToTensor()])
-    else:
-        image_height, image_width = SimpleCubePPDatasetInfo.image_dims
-        SimpleCubePPDatasetInfo.common_transorm = transforms.Compose([transforms.Resize((image_height, image_width)), transforms.ToTensor()])
 
 
 def get_train_dataset():

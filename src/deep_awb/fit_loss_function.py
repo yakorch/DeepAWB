@@ -4,11 +4,11 @@ import numpy as np
 import pandas as pd
 from scipy.stats import gaussian_kde
 
-from .data_loaders import get_test_dataset, get_train_dataset, setup_dataset_info
+from .data_loaders import get_test_dataset, get_train_dataset, SimpleCubePPDatasetInfo
 
 
 def estimate_wb_gains_density(visualize: bool) -> Callable:
-    setup_dataset_info()
+    SimpleCubePPDatasetInfo.setup()
     train_dataset, test_dataset = get_train_dataset(), get_test_dataset()
 
     train_annotations, test_annotations = train_dataset.annotations, test_dataset.annotations

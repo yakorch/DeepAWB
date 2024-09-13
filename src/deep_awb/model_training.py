@@ -14,7 +14,7 @@ from loguru import logger as console_logger
 from pytorch_lightning import Trainer
 from pytorch_lightning import loggers as pl_loggers
 
-from .data_loaders import SimpleCubePPDatasetInfo, setup_dataset_info
+from .data_loaders import SimpleCubePPDatasetInfo
 from .model_architecture import _N_CLASSES, ConvReLUMaxPoolBlockConfig, DeepAWBModel
 
 
@@ -69,7 +69,7 @@ def fit_model_and_log():
     args = parse_args()
     console_logger.debug(f"{args=}")
 
-    setup_dataset_info(args.image_scale)
+    SimpleCubePPDatasetInfo.setup(args.image_scale)
     AWB_model = create_DeepAWB_model(args)
 
     trainer = Trainer(
