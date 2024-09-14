@@ -113,21 +113,28 @@ SimpleCubePPDatasetInfo = DatasetInfo(
     A.Compose(
         [
             A.Affine(rotate=15, translate_percent=(0.1, 0.1), scale=(0.9, 1.1), p=0.75),
+            A.Perspective(scale=(0.05, 0.1), keep_size=True, p=0.5),
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.25),
-            A.GaussianBlur(blur_limit=(3, 7), sigma_limit=(0.1, 2.0), p=0.8),
-            A.GaussNoise(var_limit=(0.001, 0.01), p=0.8),
+            A.GaussianBlur(blur_limit=(3, 7), p=0.8),
+            A.MotionBlur(blur_limit=(3, 7), p=0.8),
+            A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.2, p=0.75),
+            A.GaussNoise(var_limit=0.001, p=0.5, per_channel=False),
         ]
     ),
 )
 
 
 def get_train_dataset():
-    return RawAWBDataset(csv_annotations=TRAIN_SET_FOLDER / "gt.csv", images_dir=TRAIN_SET_FOLDER / "PNG", transform=SimpleCubePPDatasetInfo.train_transform, cache_data=False)
+    return RawAWBDataset(
+        csv_annotations=TRAIN_SET_FOLDER / "gt.csv", images_dir=TRAIN_SET_FOLDER / "PROCESSED_MLE", transform=SimpleCubePPDatasetInfo.train_transform, cache_data=False
+    )
 
 
 def get_test_dataset():
-    return RawAWBDataset(csv_annotations=TEST_SET_FOLDER / "gt.csv", images_dir=TEST_SET_FOLDER / "PNG", transform=SimpleCubePPDatasetInfo.test_transform, cache_data=True)
+    return RawAWBDataset(
+        csv_annotations=TEST_SET_FOLDER / "gt.csv", images_dir=TEST_SET_FOLDER / "PROCESSED_MLE", transform=SimpleCubePPDatasetInfo.test_transform, cache_data=True
+    )
 
 
 def get_train_data_loader():
