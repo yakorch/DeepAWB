@@ -27,9 +27,9 @@ class DeepAWBTensorboardMetric(TensorboardMetric):
         return False
 
 
-val_loss = DeepAWBTensorboardMetric(
-    name="val_loss",
-    tag="val_loss",
+final_val_loss = DeepAWBTensorboardMetric(
+    name="final_val_loss",
+    tag="final_val_loss",
     lower_is_better=True,
 )
 
@@ -49,13 +49,13 @@ peak_RAM_usage = DeepAWBTensorboardMetric(
 opt_config = MultiObjectiveOptimizationConfig(
     objective=MultiObjective(
         objectives=[
-            Objective(metric=val_loss, minimize=True),
+            Objective(metric=final_val_loss, minimize=True),
             Objective(metric=inference_time, minimize=True),
             Objective(metric=peak_RAM_usage, minimize=True),
         ],
     ),
     objective_thresholds=[
-        ObjectiveThreshold(metric=val_loss, bound=0.003, relative=False),
+        ObjectiveThreshold(metric=final_val_loss, bound=0.0005, relative=False),
         ObjectiveThreshold(metric=inference_time, bound=2e-2, relative=False),
         ObjectiveThreshold(metric=peak_RAM_usage, bound=5 * 10**6, relative=False),
     ],

@@ -1,21 +1,20 @@
-import sys
-
-if __name__ == "__main__":
-    # Since this job may be run with the `torchx` CLI, we may redirect the stdout and stderr to log files for development purposes.
-    sys.stdout = open("./stdout-log.txt", "w")
-    sys.stderr = open("./stderr-log.txt", "w")
-
 import argparse
 import pathlib
+import sys
 
 import numpy as np
 import torch
 from loguru import logger as console_logger
 from pytorch_lightning import Trainer
-from pytorch_lightning import loggers as pl_loggers
 
 from .data_loaders import SimpleCubePPDatasetInfo
 from .model_architecture import _N_CLASSES, ConvReLUMaxPoolBlockConfig, DeepAWBModel
+
+
+# Since this job may be run with the `torchx` CLI, we may redirect the stdout and stderr to log files for development purposes.
+def redirect_stream():
+    sys.stdout = open("./stdout-log.txt", "w")
+    sys.stderr = open("./stderr-log.txt", "w")
 
 
 def parse_args():
@@ -34,8 +33,11 @@ def parse_args():
     parser.add_argument("--stride", type=int, nargs="+", required=True, help="Kernel stride.")
 
     parser.add_argument("--log_path", type=str, required=True, help="Path to the log file.")
+
     parser.add_argument("--script_module_path", type=pathlib.Path, required=False, help="Path to save the traced model after training.")
     parser.add_argument("--verbose", default=False, action="store_true", help="Whether to be verbose during training.")
+    parser.add_argument("--val_every_n_epochs", type=int, required=True, help="Frequency of validation score computation.")
+    parser.add_argument("--redirect", default=False, action="store_true", help="Whether to redirect the stdout and stderr to log files.")
 
     args = parser.parse_args()
     assert len(args.n_kernels) == len(args.kernel_size) == len(args.stride), "All kernel parameters must have the same length."
@@ -70,13 +72,16 @@ def fit_model_and_log():
     args = parse_args()
     console_logger.debug(f"{args=}")
 
+    if args.redirect:
+        redirect_stream()
+
     SimpleCubePPDatasetInfo.setup(args.image_scale)
     AWB_model = create_DeepAWB_model(args)
 
     trainer = Trainer(
         logger=args.verbose,
         max_epochs=args.epochs,
-        check_val_every_n_epoch=args.epochs,
+        check_val_every_n_epoch=args.val_every_n_epochs,
         enable_progress_bar=args.verbose,
         deterministic=True,
         default_root_dir=args.log_path,
@@ -84,9 +89,8 @@ def fit_model_and_log():
         enable_checkpointing=False,
     )
 
-    logger = pl_loggers.TensorBoardLogger(args.log_path)
+    logger = trainer.logger
 
-    print(f"Logging to path: {args.log_path}.")
     import time
 
     start = time.time()
@@ -102,7 +106,7 @@ def fit_model_and_log():
 
     val_loss = trainer.callback_metrics["val_loss"]
 
-    logger.log_metrics({"val_loss": val_loss})
+    logger.log_metrics({"final_val_loss": val_loss})
 
     import random
 

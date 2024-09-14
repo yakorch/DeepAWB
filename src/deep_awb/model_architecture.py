@@ -7,12 +7,10 @@ import torch.nn as nn
 from loguru import logger as console_logger
 from torch.nn import functional as F
 
-from .data_loaders import get_test_data_loader, get_train_data_loader
+from .data_loaders import get_test_data_loader, get_train_data_loader, get_train_dataset
 from .fit_loss_function import estimate_wb_gains_density
 
 _N_CLASSES = 2
-
-
 _KDE = estimate_wb_gains_density(visualize=False)
 _KDE_Epsilon = 1e-6
 
@@ -84,6 +82,15 @@ def ScaledSigmoid(scale):
     return LambdaLayer(lambda x: F.sigmoid(x) * scale)
 
 
+def ScaledTanh(requested_min: float, requested_max: float):
+    tanh_min, tanh_max = -1, 1
+
+    scale = (requested_max - requested_min) / (tanh_max - tanh_min)
+    bias = requested_min - scale * tanh_min
+
+    return LambdaLayer(lambda x: F.tanh(x) * scale + bias)
+
+
 class DeepAWBModel(pl.LightningModule):
     MAX_POSSIBLE_GAIN = 1.2
 
@@ -100,11 +107,17 @@ class DeepAWBModel(pl.LightningModule):
         self.feature_extractor, embedding_space_dim = FeatureExtractorBuilder(block_configs)
         self.regression_layer = RegressionBuilder(embedding_space_dim, hidden_neurons)
 
-        final_activation = ScaledSigmoid(self.MAX_POSSIBLE_GAIN)
+        # final_activation = ScaledSigmoid(self.MAX_POSSIBLE_GAIN)
+        final_activation = ScaledTanh(requested_min=0, requested_max=self.MAX_POSSIBLE_GAIN)
 
         self.model = nn.Sequential(self.feature_extractor, self.regression_layer, final_activation)
 
         self.learning_rate = learning_rate
+
+        train_densities = _KDE(get_train_dataset().annotations[["R/G", "B/G"]].T)
+        weights = 1 / (train_densities + _KDE_Epsilon)
+        self.average_weight = weights.mean()
+        self.weight_boundaries = (0.1, 15)
 
     def forward(self, x):
         return self.model(x)
@@ -114,20 +127,22 @@ class DeepAWBModel(pl.LightningModule):
         predictions = self(x)
         loss = F.mse_loss(predictions, y, reduction="none")
 
-        weights = 1 / np.sqrt(_KDE(y.cpu().T) + _KDE_Epsilon)
+        weights = (1 / self.average_weight) / (_KDE(y.cpu().T) + _KDE_Epsilon)
+        np.clip(weights, *self.weight_boundaries, out=weights)
         weights = torch.tensor(weights, device=loss.device, dtype=torch.float32).unsqueeze(1)
+
         weighted_loss = loss * weights
 
         return weighted_loss.mean()
 
     def training_step(self, batch, batch_idx):
         loss = self._process_batch(batch, batch_idx)
-        self.log("train_loss", loss)
+        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         loss = self._process_batch(batch, batch_idx)
-        self.log("val_loss", loss, on_epoch=True, prog_bar=False)
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):

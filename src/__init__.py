@@ -3,7 +3,7 @@ import sys
 
 from loguru import logger as console_logger
 
-console_logger.configure(handlers=[{"sink": sys.stderr, "level": "INFO"}])
+console_logger.configure(handlers=[{"sink": sys.stderr, "level": "DEBUG"}])
 
 PROJECT_DIR = pathlib.Path(__file__).absolute().parent.parent
 DATASET_DIR = PROJECT_DIR / "dataset" / "SimpleCube++"
