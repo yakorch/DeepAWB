@@ -35,6 +35,7 @@ def parse_args():
 
     parser.add_argument("--log_path", type=str, required=True, help="Path to the log file.")
     parser.add_argument("--script_module_path", type=pathlib.Path, required=False, help="Path to save the traced model after training.")
+    parser.add_argument("--verbose", default=False, action="store_true", help="Whether to be verbose during training.")
 
     args = parser.parse_args()
     assert len(args.n_kernels) == len(args.kernel_size) == len(args.stride), "All kernel parameters must have the same length."
@@ -73,10 +74,10 @@ def fit_model_and_log():
     AWB_model = create_DeepAWB_model(args)
 
     trainer = Trainer(
-        logger=False,
+        logger=args.verbose,
         max_epochs=args.epochs,
         check_val_every_n_epoch=args.epochs,
-        enable_progress_bar=False,
+        enable_progress_bar=args.verbose,
         deterministic=True,
         default_root_dir=args.log_path,
         callbacks=[],
