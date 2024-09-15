@@ -7,7 +7,7 @@ import torch.nn as nn
 from loguru import logger as console_logger
 from torch.nn import functional as F
 
-from .data_loaders import get_test_data_loader, get_train_data_loader, get_train_dataset
+from .data_loaders import get_test_data_loader, get_test_dataset, get_train_data_loader, get_train_dataset
 from .fit_loss_function import estimate_wb_gains_density
 
 _N_CLASSES = 2
@@ -111,23 +111,27 @@ class DeepAWBModel(pl.LightningModule):
         final_activation = ScaledTanh(requested_min=0, requested_max=self.MAX_POSSIBLE_GAIN)
 
         self.model = nn.Sequential(self.feature_extractor, self.regression_layer, final_activation)
+        console_logger.debug(f"{self.model=}")
 
         self.learning_rate = learning_rate
 
-        train_densities = _KDE(get_train_dataset().annotations[["R/G", "B/G"]].T)
-        weights = 1 / (train_densities + _KDE_Epsilon)
-        self.average_weight = weights.mean()
+        average_weights = []
+        for dataset_getter in (get_train_dataset, get_test_dataset):
+            densities = _KDE(dataset_getter().annotations[["R/G", "B/G"]].T)
+            weights = 1 / (densities + _KDE_Epsilon)
+            average_weights.append(weights.mean())
+        self.average_train_weight, self.average_test_weight = average_weights
         self.weight_boundaries = (0.1, 15)
 
     def forward(self, x):
         return self.model(x)
 
-    def _process_batch(self, batch, batch_idx):
+    def _process_batch(self, batch, batch_idx, average_weight):
         x, y = batch
         predictions = self(x)
         loss = F.mse_loss(predictions, y, reduction="none")
 
-        weights = (1 / self.average_weight) / (_KDE(y.cpu().T) + _KDE_Epsilon)
+        weights = (1 / average_weight) / (_KDE(y.cpu().T) + _KDE_Epsilon)
         np.clip(weights, *self.weight_boundaries, out=weights)
         weights = torch.tensor(weights, device=loss.device, dtype=torch.float32).unsqueeze(1)
 
@@ -136,18 +140,18 @@ class DeepAWBModel(pl.LightningModule):
         return weighted_loss.mean()
 
     def training_step(self, batch, batch_idx):
-        loss = self._process_batch(batch, batch_idx)
+        loss = self._process_batch(batch, batch_idx, self.average_train_weight)
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss = self._process_batch(batch, batch_idx)
+        loss = self._process_batch(batch, batch_idx, self.average_test_weight)
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
     def setup(self, stage=None): ...
