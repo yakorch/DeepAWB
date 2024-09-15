@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Iterable
 
 import numpy as np
 import pytorch_lightning as pl
@@ -91,18 +92,11 @@ def ScaledTanh(requested_min: float, requested_max: float):
     return LambdaLayer(lambda x: F.tanh(x) * scale + bias)
 
 
-class DeepAWBModel(pl.LightningModule):
+class DeepAWBModel(nn.Module):
     MAX_POSSIBLE_GAIN = 1.2
 
-    def __init__(
-        self,
-        block_configs: list[ConvReLUMaxPoolBlockConfig],
-        hidden_neurons: list[int],
-        learning_rate: float = 0.001,
-    ) -> None:
+    def __init__(self, block_configs: list[ConvReLUMaxPoolBlockConfig], hidden_neurons: list[int]) -> None:
         super().__init__()
-
-        self.save_hyperparameters()
 
         self.feature_extractor, embedding_space_dim = FeatureExtractorBuilder(block_configs)
         self.regression_layer = RegressionBuilder(embedding_space_dim, hidden_neurons)
@@ -113,7 +107,24 @@ class DeepAWBModel(pl.LightningModule):
         self.model = nn.Sequential(self.feature_extractor, self.regression_layer, final_activation)
         console_logger.debug(f"{self.model=}")
 
-        self.learning_rate = learning_rate
+    def forward(self, x):
+        return self.model(x)
+
+
+class DeepAWBLightningModule(pl.LightningModule):
+    def __init__(
+        self,
+        model: DeepAWBModel,
+        epochs: int,
+        learning_rates: Iterable[float],
+    ) -> None:
+        super().__init__()
+
+        self.model = model
+
+        assert isinstance(learning_rates, Iterable)
+        self.learning_rates = learning_rates
+        self.epochs = epochs
 
         average_weights = []
         for dataset_getter in (get_train_dataset, get_test_dataset):
@@ -150,8 +161,17 @@ class DeepAWBModel(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
+        if len(self.learning_rates) == 1:
+            initial_lr = self.learning_rates[0]
+            final_lr = 1e-6
+        elif len(self.learning_rates) == 2:
+            initial_lr, final_lr = self.learning_rates
+        else:
+            raise ValueError(f"Learning rate type is not supported. {type(self.learning_rates)=}")
+
+        optimizer = torch.optim.Adam(self.parameters(), lr=initial_lr)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.epochs, eta_min=final_lr)
+
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
     def setup(self, stage=None): ...

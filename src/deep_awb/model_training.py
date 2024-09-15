@@ -8,7 +8,7 @@ from loguru import logger as console_logger
 from pytorch_lightning import Trainer
 
 from .data_loaders import SimpleCubePPDatasetInfo
-from .model_architecture import _N_CLASSES, ConvReLUMaxPoolBlockConfig, DeepAWBModel
+from .model_architecture import _N_CLASSES, ConvReLUMaxPoolBlockConfig, DeepAWBLightningModule, DeepAWBModel
 
 
 # Since this job may be run with the `torchx` CLI, we may redirect the stdout and stderr to log files for development purposes.
@@ -25,7 +25,7 @@ def parse_args():
     parser.add_argument("--total_hidden_neurons", type=int, required=True, help="Total number of hidden neurons.")
     parser.add_argument("--MLP_depth", type=int, required=True, help="Depth of the MLP.")
 
-    parser.add_argument("--learning_rate", type=float, required=True, help="Learning rate.")
+    parser.add_argument("--learning_rates", type=float, required=True, nargs="+", help="The initial and final (optional) learning rates.")
     parser.add_argument("--epochs", type=int, required=True, help="Number of epochs.")
 
     parser.add_argument("--n_kernels", type=int, nargs="+", required=True, help="Number of kernels.")
@@ -44,7 +44,7 @@ def parse_args():
     return args
 
 
-def create_DeepAWB_model(args) -> DeepAWBModel:
+def create_DeepAWBModule(args) -> DeepAWBLightningModule:
     conv_block_configs = [ConvReLUMaxPoolBlockConfig(n_kernels=args.n_kernels[i], kernel_size=args.kernel_size[i], stride=args.stride[i]) for i in range(len(args.n_kernels))]
 
     hidden_neurons = []
@@ -60,10 +60,10 @@ def create_DeepAWB_model(args) -> DeepAWBModel:
 
     hidden_neurons.append(_N_CLASSES)
 
-    return DeepAWBModel(
-        block_configs=conv_block_configs,
-        hidden_neurons=hidden_neurons,
-        learning_rate=args.learning_rate,
+    return DeepAWBLightningModule(
+        model=DeepAWBModel(conv_block_configs, hidden_neurons),
+        epochs=args.epochs,
+        learning_rates=args.learning_rates,
     )
 
 
@@ -76,7 +76,7 @@ def fit_model_and_log():
         redirect_stream()
 
     SimpleCubePPDatasetInfo.setup(args.image_scale)
-    AWB_model = create_DeepAWB_model(args)
+    AWBModule = create_DeepAWBModule(args)
 
     trainer = Trainer(
         logger=args.verbose,
@@ -94,13 +94,13 @@ def fit_model_and_log():
     import time
 
     start = time.time()
-    trainer.fit(model=AWB_model)
+    trainer.fit(model=AWBModule)
     end = time.time()
     train_time = end - start
     logger.log_metrics({"train_time": train_time})
 
     if args.script_module_path is not None:
-        model = AWB_model.model
+        model = AWBModule.model
         model = torch.jit.trace(model, torch.randn(1, 3, *SimpleCubePPDatasetInfo.image_dims))
         model.save(args.script_module_path)
 

@@ -9,7 +9,17 @@ from . import LOG_DIR
 from .search_space import _FEATURE_EXTRACTOR_DEPTH
 
 
-def trainer(log_path: str, total_hidden_neurons: int, MLP_depth: int, learning_rate: float, epochs: int, image_scale: float, trial_idx: int = -1, **kwargs) -> specs.AppDef:
+def trainer(
+    log_path: str,
+    total_hidden_neurons: int,
+    MLP_depth: int,
+    initial_learning_rate: float,
+    final_learning_rate: float,
+    epochs: int,
+    image_scale: float,
+    trial_idx: int = -1,
+    **kwargs,
+) -> specs.AppDef:
     # define the log path so we can pass it to the TorchX ``AppDef``
     if trial_idx >= 0:
         log_path = Path(log_path).joinpath(str(trial_idx)).absolute().as_posix()
@@ -23,8 +33,9 @@ def trainer(log_path: str, total_hidden_neurons: int, MLP_depth: int, learning_r
         str(total_hidden_neurons),
         "--MLP_depth",
         str(MLP_depth),
-        "--learning_rate",
-        str(learning_rate),
+        "--learning_rates",
+        str(initial_learning_rate),
+        str(final_learning_rate),
         "--epochs",
         str(epochs),
         "--image_scale",

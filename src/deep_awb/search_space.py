@@ -11,9 +11,16 @@ parameters = [
         parameter_type=ParameterType.INT,
     ),
     RangeParameter(
-        name="learning_rate",
+        name="initial_learning_rate",
         lower=1e-4,
         upper=1e-2,
+        parameter_type=ParameterType.FLOAT,
+        log_scale=True,
+    ),
+    RangeParameter(
+        name="final_learning_rate",
+        lower=1e-6,
+        upper=1e-4,
         parameter_type=ParameterType.FLOAT,
         log_scale=True,
     ),
@@ -30,6 +37,8 @@ parameters = [
 ]
 
 param_name_map: dict[str, Parameter] = {param.name: param for param in parameters}
+
+assert param_name_map["initial_learning_rate"].lower >= param_name_map["final_learning_rate"].upper
 
 search_space = SearchSpace(
     parameters=parameters,
