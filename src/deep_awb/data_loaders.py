@@ -73,11 +73,22 @@ class RawAWBDataset(Dataset):
         return pair
 
 
+_preprocessed_strategy_to_image_normalization: dict[str, A.Normalize] = {
+    # these are precomputed on the training set only
+    "PROCESSED_MLE": A.Normalize(mean=(0.4373, 0.3857, 0.3163), std=(0.2495, 0.2281, 0.2024), max_pixel_value=1),
+    "PROCESSED_UNIFORM": A.Normalize(mean=(0.0954, 0.4912, 0.2624), std=(0.0917, 0.2781, 0.1800), max_pixel_value=1),
+}
+
+_preprocess_strategy = "PROCESSED_MLE"
+assert _preprocess_strategy in _preprocessed_strategy_to_image_normalization
+
+
 @dataclass(frozen=False, order=False)
 class DatasetInfo:
     _original_image_dims: tuple[int, int]
     _image_scale: Optional[float]
     _resize_transform: Optional[A.Compose]
+    _normalize_transform: A.Normalize
     train_augmentations: Optional[A.Compose]
 
     @property
@@ -97,19 +108,20 @@ class DatasetInfo:
         if self.train_augmentations is not None:
             transformations.append(self.train_augmentations)
 
-        transformations.append(ToTensorV2())
+        transformations.extend([self._normalize_transform, ToTensorV2()])
 
         return A.Compose(transformations)
 
     @property
     def test_transform(self):
-        return A.Compose([self._resize_transform, ToTensorV2()])
+        return A.Compose([self._resize_transform, self._normalize_transform, ToTensorV2()])
 
 
 SimpleCubePPDatasetInfo = DatasetInfo(
     ORIGINAL_IMAGE_DIMS,
     None,
     None,
+    _preprocessed_strategy_to_image_normalization[_preprocess_strategy],
     A.Compose(
         [
             A.Affine(rotate=15, translate_percent=(0.1, 0.1), scale=(0.9, 1.1), p=0.75),
@@ -125,16 +137,16 @@ SimpleCubePPDatasetInfo = DatasetInfo(
 )
 
 
-def get_train_dataset():
+def get_train_dataset(preprocess_strategy: str = _preprocess_strategy):
     return RawAWBDataset(
-        csv_annotations=TRAIN_SET_FOLDER / "gt.csv", images_dir=TRAIN_SET_FOLDER / "PROCESSED_MLE", transform=SimpleCubePPDatasetInfo.train_transform, cache_data=False
+        csv_annotations=TRAIN_SET_FOLDER / "gt.csv", images_dir=TRAIN_SET_FOLDER / preprocess_strategy, transform=SimpleCubePPDatasetInfo.train_transform, cache_data=False
     )
 
 
-def get_test_dataset():
+def get_test_dataset(preprocess_strategy: str = _preprocess_strategy):
     return RawAWBDataset(
         csv_annotations=TEST_SET_FOLDER / "gt.csv",
-        images_dir=TEST_SET_FOLDER / "PROCESSED_MLE",
+        images_dir=TEST_SET_FOLDER / preprocess_strategy,
         transform=SimpleCubePPDatasetInfo.test_transform,
         cache_data=True,
     )
