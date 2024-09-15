@@ -101,6 +101,7 @@ def fit_model_and_log():
 
     if args.script_module_path is not None:
         model = AWBModule.model
+        model.eval()
         model = torch.jit.trace(model, torch.randn(1, 3, *SimpleCubePPDatasetInfo.image_dims))
         model.save(args.script_module_path)
 

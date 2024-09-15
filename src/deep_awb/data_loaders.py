@@ -133,16 +133,19 @@ def get_train_dataset():
 
 def get_test_dataset():
     return RawAWBDataset(
-        csv_annotations=TEST_SET_FOLDER / "gt.csv", images_dir=TEST_SET_FOLDER / "PROCESSED_MLE", transform=SimpleCubePPDatasetInfo.test_transform, cache_data=True
+        csv_annotations=TEST_SET_FOLDER / "gt.csv",
+        images_dir=TEST_SET_FOLDER / "PROCESSED_MLE",
+        transform=SimpleCubePPDatasetInfo.test_transform,
+        cache_data=True,
     )
 
 
 def get_train_data_loader():
-    return DataLoader(get_train_dataset(), batch_size=32, shuffle=True, num_workers=7, persistent_workers=True, pin_memory=True)
+    return DataLoader(get_train_dataset(), batch_size=32, shuffle=True, num_workers=7, persistent_workers=True, pin_memory=True, drop_last=True)
 
 
 def get_test_data_loader():
-    return DataLoader(get_test_dataset(), batch_size=32, shuffle=False, num_workers=4, persistent_workers=True)
+    return DataLoader(get_test_dataset(), batch_size=32, shuffle=False, num_workers=4, persistent_workers=True, drop_last=False)
 
 
 if __name__ == "__main__":
