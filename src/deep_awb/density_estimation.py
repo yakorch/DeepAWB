@@ -1,20 +1,31 @@
-from typing import Callable
+from typing import Callable, Literal
 
 import numpy as np
 import pandas as pd
 from scipy.stats import gaussian_kde
 
+from .. import console_logger
 from .data_loaders import SimpleCubePPDatasetInfo, get_test_dataset, get_train_dataset
 
 
-def estimate_wb_gains_density(visualize: bool) -> Callable:
+@console_logger.catch
+def estimate_wb_gains_density(subset: Literal["train", "test", "all"], visualize: bool) -> Callable:
     SimpleCubePPDatasetInfo.setup()
-    train_dataset, test_dataset = get_train_dataset(), get_test_dataset()
 
-    train_annotations, test_annotations = train_dataset.annotations, test_dataset.annotations
-    merged_annotations_gains = pd.concat([train_annotations[["R/G", "B/G"]], test_annotations[["R/G", "B/G"]]])
+    if subset == "train":
+        dataset = get_train_dataset()
+        annotations = dataset.annotations
+    elif subset == "test":
+        dataset = get_test_dataset()
+        annotations = dataset.annotations
+    elif subset == "all":
+        train_dataset = get_train_dataset()
+        test_dataset = get_test_dataset()
+        annotations = pd.concat([train_dataset.annotations, test_dataset.annotations])
+    else:
+        raise ValueError(f"Invalid subset: {subset}")
 
-    wb_gains = np.vstack([merged_annotations_gains["R/G"], merged_annotations_gains["B/G"]])
+    wb_gains = np.vstack([annotations["R/G"], annotations["B/G"]])
 
     kde = gaussian_kde(wb_gains, bw_method=0.5)
 
@@ -63,4 +74,4 @@ def estimate_wb_gains_density(visualize: bool) -> Callable:
 
 
 if __name__ == "__main__":
-    kde = estimate_wb_gains_density(visualize=True)
+    _ = estimate_wb_gains_density(subset="all", visualize=True)

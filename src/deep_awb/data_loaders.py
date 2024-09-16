@@ -97,6 +97,9 @@ class DatasetInfo:
         return tuple(int(dim / self._image_scale) for dim in self._original_image_dims)
 
     def setup(self, image_scale: float = 1) -> None:
+        if self._image_scale is not None:
+            console_logger.warning(f"Called `setup` with {image_scale=} when it was already set to {self._image_scale=}")
+
         self._image_scale = image_scale
         image_height, image_width = self.image_dims
         self._resize_transform = A.Resize(height=image_height, width=image_width)

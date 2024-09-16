@@ -8,11 +8,11 @@ import torch.nn as nn
 from loguru import logger as console_logger
 from torch.nn import functional as F
 
-from .data_loaders import get_test_data_loader, get_test_dataset, get_train_data_loader, get_train_dataset
-from .fit_loss_function import estimate_wb_gains_density
+from .data_loaders import get_test_data_loader, get_train_data_loader, get_train_dataset
+from .density_estimation import estimate_wb_gains_density
 
 _N_CLASSES = 2
-_KDE = estimate_wb_gains_density(visualize=False)
+_KDE = estimate_wb_gains_density(subset="train", visualize=False)
 _KDE_Epsilon = 1e-6
 
 
@@ -126,23 +126,22 @@ class DeepAWBLightningModule(pl.LightningModule):
         self.learning_rates = learning_rates
         self.epochs = epochs
 
-        average_weights = []
-        for dataset_getter in (get_train_dataset, get_test_dataset):
-            densities = _KDE(dataset_getter().annotations[["R/G", "B/G"]].T)
-            weights = 1 / (densities + _KDE_Epsilon)
-            average_weights.append(weights.mean())
-        self.average_train_weight, self.average_test_weight = average_weights
+        train_densities = _KDE(get_train_dataset().annotations[["R/G", "B/G"]].T)
+        train_weights = 1 / (train_densities + _KDE_Epsilon)
+        self.train_weights_mean = train_weights.mean()
         self.weight_boundaries = (0.1, 15)
 
     def forward(self, x):
         return self.model(x)
 
-    def _process_batch(self, batch, batch_idx, average_weight):
+    def _process_batch(self, batch, batch_idx, is_train: bool):
         x, y = batch
         predictions = self(x)
-        loss = F.mse_loss(predictions, y, reduction="none")
+        if not is_train:
+            return F.mse_loss(predictions, y)
 
-        weights = (1 / average_weight) / (_KDE(y.cpu().T) + _KDE_Epsilon)
+        loss = F.mse_loss(predictions, y, reduction="none")
+        weights = (1 / self.train_weights_mean) / (_KDE(y.cpu().T) + _KDE_Epsilon)
         np.clip(weights, *self.weight_boundaries, out=weights)
         weights = torch.tensor(weights, device=loss.device, dtype=torch.float32).unsqueeze(1)
 
@@ -151,12 +150,12 @@ class DeepAWBLightningModule(pl.LightningModule):
         return weighted_loss.mean()
 
     def training_step(self, batch, batch_idx):
-        loss = self._process_batch(batch, batch_idx, self.average_train_weight)
+        loss = self._process_batch(batch, batch_idx, is_train=True)
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss = self._process_batch(batch, batch_idx, self.average_test_weight)
+        loss = self._process_batch(batch, batch_idx, is_train=False)
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
