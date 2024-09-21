@@ -1,24 +1,23 @@
 name: ai
 channels:
-  - conda-forge
-  - pytorch
+- conda-forge
+- pytorch
 dependencies:
-  - albumentations
-  - gpytorch
-  - ipywidgets
-  - lightning
-  - loguru
-  - matplotlib
-  - memory_profiler
-  - numba
-  - onnx
-  - pandas
-  - pillow
-  - plotly
-  - python=3.12
-  - pytorch
-  - pyyaml
-  - streamlit
-  - torchvision
-  pip:
-    - torch
+- albumentations
+- gpytorch
+- ipywidgets
+- lightning
+- loguru
+- matplotlib
+- memory_profiler
+- numba
+- onnx
+- pandas
+- pillow
+- plotly
+- python=3.12
+- pytorch
+- pyyaml
+- streamlit
+- torchvision
+
