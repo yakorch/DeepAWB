@@ -105,6 +105,16 @@ fig.add_trace(
     )
 )
 
+fig.add_trace(
+    go.Scatter(x=[classical_gains[0]], y=[classical_gains[1]], mode="markers", marker=dict(size=10, color="yellow", symbol="circle"), name="Classical Bayesian Method Prediction")
+)
+
+fig.add_trace(
+    go.Scatter(x=[NN_predicted_gains[0]], y=[NN_predicted_gains[1]], mode="markers", marker=dict(size=10, color="purple", symbol="circle"), name="Neural Network Prediction")
+)
+
+fig.add_trace(go.Scatter(x=[ground_truth_gains[0]], y=[ground_truth_gains[1]], mode="markers", marker=dict(size=10, color="cyan", symbol="circle"), name="Ground Truth Gains"))
+
 
 fig.update_layout(
     title="Gaussian Process Regression Gains Curve",
