@@ -1,0 +1,17 @@
+albumentations
+gpytorch
+ipywidgets
+lightning
+loguru
+matplotlib
+memory_profiler
+numba
+onnx
+pandas
+pillow
+plotly
+pytorch
+pyyaml
+streamlit
+torchvision
+
