@@ -152,7 +152,7 @@ def compute_channel_patches_averages(blocks, min_avg_G):
 _MLE_gains_estimate = (0.425, 0.7)
 
 
-def perform_bayes_AWB(image: pathlib.Path | np.ndarray, min_avg_G=0.05, max_delta_squared=0.35, visualize=False):
+def perform_bayes_AWB(image: pathlib.Path | np.ndarray, min_avg_G=0.005, max_delta_squared=0.1, visualize=False):
     """
     Takes either an image path, or an image array.
     """
