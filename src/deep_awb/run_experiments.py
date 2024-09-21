@@ -5,8 +5,8 @@ from ax.modelbridge.dispatch_utils import choose_generation_strategy
 from ax.service.scheduler import Scheduler, SchedulerOptions
 
 from .experiment_metrics import opt_config
-from .torchx_ax_runner import ax_runner
 from .search_space import search_space
+from .torchx_ax_runner import ax_runner
 
 experiment = Experiment(
     name="torchx_awb",
@@ -16,7 +16,7 @@ experiment = Experiment(
 )
 
 
-total_trials = 1  # total evaluation budget
+total_trials = 10  # total evaluation budget
 
 
 gs = choose_generation_strategy(

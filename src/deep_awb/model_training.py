@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument("--image_scale", type=float, default=1, help="Scale factor for images.")
 
     parser.add_argument("--total_hidden_neurons", type=int, required=True, help="Total number of hidden neurons.")
+    parser.add_argument("--decay_rate", type=float, required=True, help="Decay rate of the neurons.")
     parser.add_argument("--MLP_depth", type=int, required=True, help="Depth of the MLP.")
 
     parser.add_argument("--learning_rates", type=float, required=True, nargs="+", help="The initial and final (optional) learning rates.")
@@ -49,11 +50,12 @@ def create_DeepAWBModule(args) -> DeepAWBLightningModule:
 
     hidden_neurons = []
     n_hidden_layers = args.MLP_depth - 1
-    decay_rate = 0.5
+    decay_rate = args.decay_rate
     distribution = []
     for i in range(n_hidden_layers):
         proportion = np.exp(-decay_rate * i)
         distribution.append(proportion)
+
     distribution = np.array(distribution) / np.sum(distribution)
     hidden_neurons = [int(args.total_hidden_neurons * d) for d in distribution]
     hidden_neurons[0] -= sum(hidden_neurons) - args.total_hidden_neurons
@@ -70,10 +72,10 @@ def create_DeepAWBModule(args) -> DeepAWBLightningModule:
 @console_logger.catch
 def fit_model_and_log():
     args = parse_args()
-    console_logger.debug(f"{args=}")
-
     if args.redirect:
         redirect_stream()
+
+    console_logger.debug(f"{args=}")
 
     SimpleCubePPDatasetInfo.setup(args.image_scale)
     AWBModule = create_DeepAWBModule(args)

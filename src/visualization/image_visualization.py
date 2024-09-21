@@ -28,6 +28,7 @@ def linearize(img, black_lvl=2048, saturation_lvl=2**14 - 1) -> np.ndarray:
 
 def compute_unbalanced_image(raw_image_path: pathlib.Path) -> np.ndarray:
     assert raw_image_path.suffix == ".png"
+    assert raw_image_path.parent.name == "PNG"
 
     cam = cv2.imread(raw_image_path, cv2.IMREAD_UNCHANGED)
     return linearize(cv2.cvtColor(cam, cv2.COLOR_BGR2RGB).astype(np.float64))
