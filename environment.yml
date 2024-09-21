@@ -1,9 +1,7 @@
 name: ai
 channels:
-- defaults
 - conda-forge
 - pytorch
-- nvidia
 dependencies:
 - albumentations
 - gpytorch
