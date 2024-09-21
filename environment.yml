@@ -1,5 +1,6 @@
 name: ai
 channels:
+- defaults
 - conda-forge
 - pytorch
 dependencies:
