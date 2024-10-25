@@ -5,7 +5,7 @@ from ax.runners.torchx import TorchXRunner
 from torchx import specs
 from torchx.components import utils
 
-from . import LOG_DIR
+from . import EXPERIMENTAL_DEEPAWB_MODEL, LOG_DIR
 from .search_space import _FEATURE_EXTRACTOR_DEPTH
 
 
@@ -16,7 +16,6 @@ def trainer(
     MLP_depth: int,
     initial_learning_rate: float,
     final_learning_rate: float,
-    epochs: int,
     image_scale: float,
     trial_idx: int = -1,
     **kwargs,
@@ -25,6 +24,8 @@ def trainer(
     if trial_idx >= 0:
         log_path = Path(log_path).joinpath(str(trial_idx)).absolute().as_posix()
     n_kernels, kernel_sizes, strides = ([str(kwargs[f"{attribute}_{i}"]) for i in range(_FEATURE_EXTRACTOR_DEPTH)] for attribute in ["n_kernels", "kernel_size", "stride"])
+
+    epochs = 40
 
     return utils.python(
         "--log_path",
@@ -51,6 +52,9 @@ def trainer(
         "--redirect",
         "--val_every_n_epochs",
         str(epochs),
+        "--script_module_path",
+        str(EXPERIMENTAL_DEEPAWB_MODEL),
+        "--measure_locally",
         name="trainer",
         m="src.deep_awb.model_training",
         image=torchx.version.TORCHX_IMAGE,
@@ -61,7 +65,7 @@ ax_runner = TorchXRunner(
     tracker_base="/tmp/",
     component=trainer,
     scheduler="local_cwd",
-    component_const_params={"log_path": LOG_DIR},
+    component_const_params={"log_path": str(LOG_DIR)},
     cfg={},
 )
 
@@ -74,7 +78,7 @@ if __name__ == "__main__":
     #     "MLP_depth": 3,
     #     "initial_learning_rate": 0.001,
     #     "final_learning_rate": 0.0001,
-    #     "epochs": 10,
+    #     "epochs": 1,
     #     "image_scale": 1.0,
     #     "trial_idx": 0,
     #     **{f"n_kernels_{i}": 16 * (i + 1) for i in range(_FEATURE_EXTRACTOR_DEPTH)},
@@ -86,7 +90,7 @@ if __name__ == "__main__":
 
     # runner = get_runner()
 
-    # app = trainer(log_path="nice", **example_params)
+    # app = trainer(log_path="src/deep_awb/logs", **example_params)
     # app_handle = runner.run(app, scheduler="local_cwd")
     # status = runner.wait(app_handle)
     # print(status)

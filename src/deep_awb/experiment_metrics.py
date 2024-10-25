@@ -55,8 +55,8 @@ opt_config = MultiObjectiveOptimizationConfig(
         ],
     ),
     objective_thresholds=[
-        ObjectiveThreshold(metric=final_val_loss, bound=0.0005, relative=False),
-        ObjectiveThreshold(metric=inference_time, bound=2e-2, relative=False),
-        ObjectiveThreshold(metric=peak_RAM_usage, bound=5 * 10**6, relative=False),
+        ObjectiveThreshold(metric=final_val_loss, bound=0.001, relative=False),
+        ObjectiveThreshold(metric=inference_time, bound=2e-2, relative=False),  # on Mac CPU
+        ObjectiveThreshold(metric=peak_RAM_usage, bound=100e6, relative=False),
     ],
 )

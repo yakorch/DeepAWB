@@ -1,4 +1,3 @@
-import pathlib
 import warnings
 
 import numpy as np
@@ -10,6 +9,7 @@ import torch
 from src import DATASET_DIR, RAW_TEST_IMAGES_FOLDER
 from src.bayesian_awb.bayesian_awb_algorithm import perform_bayes_AWB
 from src.bayesian_awb.estimate_CT_curve import load_models
+from src.deep_awb import FINAL_DEEPAWB_MODEL
 from src.deep_awb.data_loaders import SimpleCubePPDatasetInfo, get_test_dataset
 from src.deep_awb.model_inference import load_model, optimize_model
 from src.visualization.image_visualization import apply_white_balance, compute_unbalanced_image, perform_color_correction_and_gamma
@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="torch.storage"
 
 
 @st.cache_resource
-def load_and_optimize_model(model_path=pathlib.Path(".") / "src" / "deep_awb" / "models" / "trained_traced_model.pt"):
+def load_and_optimize_model(model_path=FINAL_DEEPAWB_MODEL):
     model = load_model(model_path)
     model = optimize_model(model, torch.randn(1, 3, 288, 432))
     return model

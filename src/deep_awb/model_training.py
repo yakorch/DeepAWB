@@ -1,20 +1,5 @@
 import argparse
 import pathlib
-import sys
-
-import numpy as np
-import torch
-from loguru import logger as console_logger
-from pytorch_lightning import Trainer
-
-from .data_loaders import SimpleCubePPDatasetInfo
-from .model_architecture import _N_CLASSES, ConvReLUMaxPoolBlockConfig, DeepAWBLightningModule, DeepAWBModel
-
-
-# Since this job may be run with the `torchx` CLI, we may redirect the stdout and stderr to log files for development purposes.
-def redirect_stream():
-    sys.stdout = open("./stdout-log.txt", "w")
-    sys.stderr = open("./stderr-log.txt", "w")
 
 
 def parse_args():
@@ -35,14 +20,40 @@ def parse_args():
 
     parser.add_argument("--log_path", type=str, required=True, help="Path to the log file.")
 
-    parser.add_argument("--script_module_path", type=pathlib.Path, required=False, help="Path to save the traced model after training.")
+    parser.add_argument("--script_module_path", type=pathlib.Path, required=True, help="Path to save the traced model after training.")
     parser.add_argument("--verbose", default=False, action="store_true", help="Whether to be verbose during training.")
     parser.add_argument("--val_every_n_epochs", type=int, required=True, help="Frequency of validation score computation.")
     parser.add_argument("--redirect", default=False, action="store_true", help="Whether to redirect the stdout and stderr to log files.")
+    parser.add_argument("--measure_locally", default=False, action="store_true", help="Whether to measure the inference locally.")
+
+    parser.add_argument("-m", type=str, required=False, help="Necessary to work-around a profiler bug.")
 
     args = parser.parse_args()
     assert len(args.n_kernels) == len(args.kernel_size) == len(args.stride), "All kernel parameters must have the same length."
     return args
+
+
+# Since this job may be run with the `torchx` CLI, we may redirect the stdout and stderr to log files for development purposes.
+def redirect_stream():
+    import sys
+
+    sys.stdout = open("./stdout-log.txt", "w")
+    sys.stderr = open("./stderr-log.txt", "w")
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    if args.redirect:
+        redirect_stream()
+
+
+import numpy as np
+import torch
+from loguru import logger as console_logger
+from pytorch_lightning import Trainer
+
+from src.deep_awb.data_loaders import SimpleCubePPDatasetInfo
+from src.deep_awb.model_architecture import _N_CLASSES, ConvReLUMaxPoolBlockConfig, DeepAWBLightningModule, DeepAWBModel
 
 
 def create_DeepAWBModule(args) -> DeepAWBLightningModule:
@@ -71,17 +82,13 @@ def create_DeepAWBModule(args) -> DeepAWBLightningModule:
 
 @console_logger.catch
 def fit_model_and_log():
-    args = parse_args()
-    if args.redirect:
-        redirect_stream()
-
     console_logger.debug(f"{args=}")
 
     SimpleCubePPDatasetInfo.setup(args.image_scale)
     AWBModule = create_DeepAWBModule(args)
 
     trainer = Trainer(
-        logger=args.verbose,
+        logger=True,
         max_epochs=args.epochs,
         check_val_every_n_epoch=args.val_every_n_epochs,
         enable_progress_bar=args.verbose,
@@ -101,20 +108,28 @@ def fit_model_and_log():
     train_time = end - start
     logger.log_metrics({"train_time": train_time})
 
-    if args.script_module_path is not None:
-        model = AWBModule.model
-        model.eval()
-        model = torch.jit.trace(model, torch.randn(1, 3, *SimpleCubePPDatasetInfo.image_dims))
-        model.save(args.script_module_path)
+    model = AWBModule.model
+    model.eval()
+    model = torch.jit.trace(model, torch.randn(1, 3, *SimpleCubePPDatasetInfo.image_dims))
+    model.save(args.script_module_path)
 
     val_loss = trainer.callback_metrics["val_loss"]
 
     logger.log_metrics({"final_val_loss": val_loss})
 
-    import random
+    if args.measure_locally:
+        from src.deep_awb.model_inference import measure_model_inference
 
-    logger.log_metrics({"inference_time": random.random()})
-    logger.log_metrics({"peak_RAM_usage": random.random()})
+        inference_stats = measure_model_inference(args.script_module_path, args.image_scale, optimize=True, n_runs=50, yaml_path=None)
+    else:
+        from src.deep_awb.ssh_model_sending import evaluate_remote_model_inference, sftp_upload_model_to_edge_device
+
+        script_module_Path = pathlib.Path(args.script_module_path)
+        sftp_upload_model_to_edge_device(script_module_Path)
+        inference_stats = evaluate_remote_model_inference(script_module_Path.name, args.image_scale)
+
+    logger.log_metrics({"inference_time": inference_stats.wall_time})
+    logger.log_metrics({"peak_RAM_usage": inference_stats.peak_memory_usage_bytes})
 
     logger.save()
 

@@ -2,7 +2,7 @@ import argparse
 import pathlib
 import time
 from dataclasses import asdict, dataclass
-from typing import Callable
+from typing import Callable, Optional
 
 import numpy as np
 import torch
@@ -19,17 +19,17 @@ _TORCH_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class InferenceStats:
     cpu_time: float
     wall_time: float
-    peak_memory_usage_MiB: float
+    peak_memory_usage_bytes: int
     image_scale: float
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run the inference measuring experiment.")
-    parser.add_argument("--image_scale", type=int, required=True, help="Image dimensions.")
+    parser.add_argument("--image_scale", type=float, required=True, help="Image dimensions.")
     parser.add_argument("--optimize", type=bool, required=True, help="Whether to optimize the model for inference.")
     parser.add_argument("--n_runs", type=int, required=True, help="Number of runs to measure the inference time.")
     parser.add_argument("--script_module_path", type=pathlib.Path, required=True, help="Path to the `ScriptModule` model.")
-    parser.add_argument("--yaml_path", type=pathlib.Path, required=True, help="YAML inference results path.")
+    parser.add_argument("--yaml_path", type=pathlib.Path, required=False, help="YAML inference results path.")
 
     return parser.parse_args()
 
@@ -84,22 +84,25 @@ def load_model(script_module_path: pathlib.Path) -> torch.jit.ScriptModule:
     return model
 
 
-if __name__ == "__main__":
-    args = parse_args()
-
-    model = load_model(args.script_module_path)
-
-    SimpleCubePPDatasetInfo.setup(args.image_scale)
+def measure_model_inference(script_module_path: pathlib.Path, image_scale: float, optimize: bool, n_runs: int, yaml_path: Optional[pathlib.Path]):
+    model = load_model(script_module_path)
+    SimpleCubePPDatasetInfo.setup(image_scale)
     sample_input = torch.rand(1, 3, *SimpleCubePPDatasetInfo.image_dims)
 
-    if args.optimize:
+    if optimize:
         model = optimize_model(model, sample_input)
 
-    (mem_usage_MiB_samples, (cpu_time, wall_time)) = memory_usage((min_inference_time, (model, sample_input, args.n_runs), {}), interval=0.005, timeout=1, retval=True)
-    peak_memory_increment = max(mem_usage_MiB_samples) - mem_usage_MiB_samples[0]
+    (mem_usage_MiB_samples, (cpu_time, wall_time)) = memory_usage((min_inference_time, (model, sample_input, n_runs), {}), interval=0.005, timeout=1, retval=True)
+    peak_memory_increment_MiB = max(mem_usage_MiB_samples) - mem_usage_MiB_samples[0]
+    inference_stats = InferenceStats(cpu_time, wall_time, int(peak_memory_increment_MiB * 2**20), image_scale)
 
-    inference_stats = InferenceStats(cpu_time, wall_time, peak_memory_increment, args.image_scale)
-    console_logger.info(f"{inference_stats=}")
+    if yaml_path:
+        with open(yaml_path, "w") as yaml_file:
+            yaml.dump(asdict(inference_stats), yaml_file)
 
-    with open(args.yaml_path, "w") as yaml_file:
-        yaml.dump(asdict(inference_stats), yaml_file)
+    return inference_stats
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    print(asdict(measure_model_inference(args.script_module_path, args.image_scale, args.optimize, args.n_runs, args.yaml_path)))

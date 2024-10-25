@@ -1,0 +1,22 @@
+name: ai
+channels:
+- conda-forge
+- pytorch
+dependencies:
+- gpytorch
+- ipywidgets
+- lightning
+- loguru
+- matplotlib
+- memory_profiler
+- onnx
+- pandas
+- paramiko
+- pillow
+- plotly
+- python=3.12
+- python-dotenv
+- pytorch
+- pyyaml
+- torchvision
+

@@ -156,7 +156,7 @@ def get_test_dataset(preprocess_strategy: str = _preprocess_strategy):
 
 
 def get_train_data_loader():
-    return DataLoader(get_train_dataset(), batch_size=32, shuffle=True, num_workers=7, persistent_workers=True, pin_memory=True, drop_last=True)
+    return DataLoader(get_train_dataset(), batch_size=16, shuffle=True, num_workers=6, persistent_workers=True, pin_memory=True, drop_last=True)
 
 
 def get_test_data_loader():
